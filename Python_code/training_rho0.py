@@ -312,7 +312,7 @@ def main():
     net = dde.maps.FNN(layer_size, activation, initializer)
     model = dde.Model(data,net)
     model.compile("adam" , lr= 0.001)
-    Callfcn = dde.callbacks.ModelCheckpoint('../Model_save/Test_rho0/test_rho0',verbose=1,save_better_only=True,period=2)
+    Callfcn = dde.callbacks.ModelCheckpoint('../Model_save/test_rho0',verbose=1,save_better_only=True,period=2)
     losshistory, train_state = model.train(epochs=6000,callbacks=[Callfcn])
     dde.saveplot(losshistory, train_state, issave=True, isplot=True)
 
