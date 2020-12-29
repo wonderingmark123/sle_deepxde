@@ -1,0 +1,16 @@
+plan for following works
+
+1
+use rho0 to test the differential equation and deepxde
+get the training points first and use those points for the training 
+compare the result with the rho0
+
+get more familiar with the deepxde and know how to change the data in the network
+
+
+2 
+use the result of odeint to get the initial network and then training this net with differential equation
+
+what I want from NIe
+Rho0 function with q and t
+ode result of rho

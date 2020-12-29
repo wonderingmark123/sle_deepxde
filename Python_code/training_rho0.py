@@ -46,7 +46,7 @@ class ContantNumbers:
 
         self.n_bar = (np.exp(hbar*self.w_vib/k_b/T)-1)**(-1)
         self.sigma = (self.n_bar+0.5)**0.5
-        self.sizeall = (self.N + 1)**2 * self.alpha_max
+        # self.sizeall = (self.N + 1)**2 * self.alpha_max
         self.sizeRho = (self.N + 1)**2
         self.G = self.g * (self.nc + 1)**0.5
 C =ContantNumbers()
@@ -191,57 +191,6 @@ def SLE_q(x,y,C):
     #         Drho[X_imag] = Drho[X_imag] + EE + HH
 
     return Drho
-def trash():
-    for n in range(1 ,C.N + 1):
-        #  n = 1: N
-        for m in range(n + 1 , C.N + 2 ):
-            # m = n + 1: N + 1
-            X_imag = getXHalf_imag(m,n, C.N)
-            X_real = getXHalf_real(m,n, C.N)
-
-            # real part 
-            indexAA =  getXHalf_imag(C.N + 1, m , C.N)
-            AA = - (
-                y[:,X_imag:X_imag+1] * ( w - v -lamb * w_vib * x[:,n-1:n] )
-                - G * y[:,indexAA:indexAA+1]
-            )
-            DD = AA *x[:,n-1:n] *0
-            if m == C.N+1:
-                for k in range(1,C.N+1):
-                    if k >n:
-                        indexDD = getXHalf_imag(k,n,C.N)
-                        DD = DD + G * y[:,indexDD:indexDD+1]
-                    elif k < n:
-                        indexDD = getXHalf_imag(n,k,C.N)
-                        DD = DD - G * y[:,indexDD:indexDD+1]
-            else:
-                indexDD = getXHalf_imag(C.N+1, n ,C.N)
-                DD = y[:,X_imag:X_imag+1] * \
-                    (w - v - lamb * w_vib * x[:,m-1:m] ) \
-                        + G * y[:, indexDD:indexDD+1]
-            
-            # imag part 
-            indexEE = getXHalf_real(C.N+1,m,C.N )
-            EE = y[:,X_real:X_real+1] * (w - v - lamb * w_vib * x[:, n-1:n]) \
-                + G * y[:,indexEE:indexEE+1 ]
-            HH = EE * 0
-            if m == C.N +1 :
-                for k in range(1,C.N + 1):
-                    if k > n:
-                        indexEE = getXHalf_real(k,n,C.N)
-                        HH = HH - G * y[:,indexEE :indexEE +1]
-                    elif k < n:
-                        indexEE = getXHalf_real(n,k,C.N)
-                        HH = HH - G * y[:,indexEE:indexEE+1]
-                    elif k == n:
-                        HH = HH - G * y[:,n-1:n]
-            else:
-                indexEE = getXHalf_real(C.N + 1,n,C.N)
-                HH = - y[:, X_real:X_real+1]* \
-                    (w - v - lamb * w_vib * x[:, m-1:m]) \
-                        - G * y[:,indexEE:indexEE+1]
-            # Drho[X_real] = Drho[X_real] + AA + DD
-            # Drho[X_imag] = Drho[X_imag] + EE + HH
 
 def phi(q,alphaS):
     """
@@ -282,7 +231,7 @@ def initialState(X,wei=-1):
             Rhoij = 1/2/C.N 
         return Rhoij
     NUM_initial,_ = np.shape(X)
-    Rho0 = np.zeros([NUM_initial,C.sizeall])
+    Rho0 = np.zeros([NUM_initial,C.sizeRho])
     N = C.N
     ConstantNumber = 1/ ((2*np.pi)**(1/4) * np.sqrt(C.sigma) )**N
     Phi0_multi = 1
@@ -307,8 +256,11 @@ def main():
     """
     main function for differential function with q
     """
+    
     dde.config.real.set_float64()
     # geometry part
+
+
     tmax = 1
     Qmax = 10/C.sigma
     Xmin=[]
@@ -316,6 +268,8 @@ def main():
     for i in range(1,C.N + 1):
         Xmin.append(-Qmax)
         Xmax.append(Qmax)
+    x0 = np.random.random([10000,C.N+1])
+    x0[:,0:C.N+1] = 2 * Qmax*(x0[:,0:C.N+1]-0.5)
     geom = dde.geometry.Hypercube(Xmin,Xmax)
     # geom = dde.geometry.Interval(-1, 1)
     timedomain = dde.geometry.TimeDomain(0, tmax)
@@ -326,20 +280,30 @@ def main():
     ytest = tf.convert_to_tensor(ytest)
     # Initial conditions
     ic = []
+
+    ptset = dde.bc.PointSet(x0)
+    ob_y = initialState(x0)
+    inside = lambda x, _: ptset.inside(x)
+
     for j in range(0,(C.N+1) **2):
         ic.append(dde.IC(geom, lambda X: initialState(X,j), boundary,component= j))
+        ic.append( dde.DirichletBC(
+        geom, ptset.values_to_func(ob_y[:, j:j+1]), inside, component=j
+        ))
         # test
         # print(initialState(x_initial,j))
     # print(SLE_q(xtest,ytest))
-    bc = dde.DirichletBC(geom,lambda _: 0, lambda _, on_boundary: on_boundary)
-    ic.append(bc)
+    # bc = dde.DirichletBC(geom,lambda _: 0, lambda _, on_boundary: on_boundary)
+    # ic.append(bc)
+
     # data
     data = dde.data.TimePDE(geom,
-    lambda x,y: SLE_q(x,y,C),
+    lambda x,y:  y*0,
     ic ,
     num_domain= 4000, 
     num_boundary= 0,
     num_initial=100, 
+    anchors=x0,
     num_test=None)
 
     layer_size = [C.N+1] + [50] * 3 + [(C.N+1) **2]
@@ -347,9 +311,9 @@ def main():
     initializer = "Glorot uniform"
     net = dde.maps.FNN(layer_size, activation, initializer)
     model = dde.Model(data,net)
-    model.compile("adam" , lr= 0.0001)
-
-    losshistory, train_state = model.train(epochs=600000)
+    model.compile("adam" , lr= 0.001)
+    Callfcn = dde.callbacks.ModelCheckpoint('../Model_save/Test_rho0/test_rho0',verbose=1,save_better_only=True,period=2)
+    losshistory, train_state = model.train(epochs=6000,callbacks=[Callfcn])
     dde.saveplot(losshistory, train_state, issave=True, isplot=True)
 
 if __name__ == "__main__":

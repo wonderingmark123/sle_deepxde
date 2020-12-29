@@ -49,19 +49,21 @@ class ContantNumbers:
         self.sizeall = (self.N + 1)**2 * self.alpha_max
         self.sizeRho = (self.N + 1)**2
         self.G = self.g * (self.nc + 1)**0.5
-C =ContantNumbers()
-DtypeTF = tf.float64
-Gamma=tf.constant(C.Gamma,dtype=DtypeTF)
-Ntf = tf.constant(C.N,dtype=DtypeTF)
-sizeRho = tf.constant(C.sizeRho,dtype=DtypeTF)
-n_bar = tf.constant(C.n_bar,dtype=DtypeTF)
-lamb = tf.constant(C.lamb,dtype=DtypeTF)
-sigma = tf.constant(C.sigma,dtype=DtypeTF)
-G = tf.constant(C.G,dtype=DtypeTF)
-g = tf.constant(C.g,dtype=DtypeTF)
-w_vib = tf.constant(C.w_vib,dtype=DtypeTF)
-w = tf.constant(C.w,dtype=DtypeTF)
-v= tf.constant(C.v,dtype=DtypeTF)
+if True:
+    # initialize some constant parameters
+    C =ContantNumbers()
+    DtypeTF = tf.float64
+    Gamma=tf.constant(C.Gamma,dtype=DtypeTF)
+    Ntf = tf.constant(C.N,dtype=DtypeTF)
+    sizeRho = tf.constant(C.sizeRho,dtype=DtypeTF)
+    n_bar = tf.constant(C.n_bar,dtype=DtypeTF)
+    lamb = tf.constant(C.lamb,dtype=DtypeTF)
+    sigma = tf.constant(C.sigma,dtype=DtypeTF)
+    G = tf.constant(C.G,dtype=DtypeTF)
+    g = tf.constant(C.g,dtype=DtypeTF)
+    w_vib = tf.constant(C.w_vib,dtype=DtypeTF)
+    w = tf.constant(C.w,dtype=DtypeTF)
+    v= tf.constant(C.v,dtype=DtypeTF)
 def getAlpha(alphaNUM,C):
     """
     get the index of individual alpha with alphaNUM
@@ -301,8 +303,9 @@ def initialState(X,wei=-1):
         return Rho0
     else:
         return Rho0[:,wei:wei+1]
-def boundary(_, on_initial):
+def initial_fcn(_, on_initial):
     return on_initial
+
 def main():
     """
     main function for differential function with q
@@ -347,9 +350,9 @@ def main():
     initializer = "Glorot uniform"
     net = dde.maps.FNN(layer_size, activation, initializer)
     model = dde.Model(data,net)
-    model.compile("adam" , lr= 0.0001)
-
-    losshistory, train_state = model.train(epochs=600000)
+    model.compile("adam" , lr= 0.001)
+    model.compile("L-BFGS-B")
+    losshistory, train_state = model.train(epochs=600000,callbacks=ModelCheckpoint)
     dde.saveplot(losshistory, train_state, issave=True, isplot=True)
 
 if __name__ == "__main__":
