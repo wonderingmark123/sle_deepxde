@@ -27,12 +27,12 @@ class ContantNumbers:
         self.v = 0
         
         w_vib = 1200
-        self.w_vib = w_vib*100*c / 1e12
+        self.w_vib = w_vib*100*c 
         # % [cm^(-1)] ---> [m^(-1)]  ---> s^ -1
-        self.Gamma = 33 * 100*c / 1e12
+        self.Gamma = 33 * 100*c
         # % [cm^(-1)]
         self.lamb = 0.5
-        self.g = 70*100*c / 1e12
+        self.g = 70*100*c 
         # % [cm^(-1)]
         # self.alphaArray = reshape(1:self.alpha_max,self.cutoff + 1,self.cutoff +1)
         n_c = 0
@@ -46,22 +46,21 @@ class ContantNumbers:
 
         self.n_bar = (np.exp(hbar*self.w_vib/k_b/T)-1)**(-1)
         self.sigma = (self.n_bar+0.5)**0.5
-        self.sizeall = (self.N + 1)**2 * self.alpha_max
+        # self.sizeall = (self.N + 1)**2 * self.alpha_max
         self.sizeRho = (self.N + 1)**2
         self.G = self.g * (self.nc + 1)**0.5
 if True:
-    # initialize some constant parameters
     C =ContantNumbers()
     DtypeTF = tf.float64
-    Gamma=tf.constant(C.Gamma,dtype=DtypeTF)
+    Gamma=tf.constant(C.Gamma/ 1e12,dtype=DtypeTF)
     Ntf = tf.constant(C.N,dtype=DtypeTF)
     sizeRho = tf.constant(C.sizeRho,dtype=DtypeTF)
     n_bar = tf.constant(C.n_bar,dtype=DtypeTF)
     lamb = tf.constant(C.lamb,dtype=DtypeTF)
     sigma = tf.constant(C.sigma,dtype=DtypeTF)
-    G = tf.constant(C.G,dtype=DtypeTF)
+    G = tf.constant(C.G/ 1e12,dtype=DtypeTF)
     g = tf.constant(C.g,dtype=DtypeTF)
-    w_vib = tf.constant(C.w_vib,dtype=DtypeTF)
+    w_vib = tf.constant(C.w_vib/ 1e12,dtype=DtypeTF)
     w = tf.constant(C.w,dtype=DtypeTF)
     v= tf.constant(C.v,dtype=DtypeTF)
 def getAlpha(alphaNUM,C):

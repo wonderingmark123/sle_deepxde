@@ -2,7 +2,6 @@ from os import error
 import numpy as np
 import deepxde as dde
 from deepxde.backend import tf
-from numpy.core.function_base import linspace
 from numpy.lib import polynomial
 import scipy
 import math
@@ -255,26 +254,6 @@ def initialState(X,wei=-1):
         return Rho0[:,wei:wei+1]
 def boundary(_, on_initial):
     return on_initial
-def plot_3d_initial():
-    fig = plt.figure()  #定义新的三维坐标轴
-    ax3 = plt.axes(projection='3d')
-    Qmax = 10/C.sigma
-    #定义三维数据
-    num=1000
-    x0 = np.random.random([num,C.N+1])
-    x0[;,1]=np.linspace(-Qmax,Qmax,num)
-    x0[;,2]=np.linspace(-Qmax,Qmax,num)
-    x0[:,0:C.N] = 2 * Qmax*(x0[:,0:C.N]-0.5)
-    zz = initialState(x0)
-    for i in range(0,len(zz[1,:])):
-        X, Y,Z = np.meshgrid(x0[:,0], x0[:,1],zz[:,1])
-        # Z = np.sin(X)+np.cos(Y)
-
-
-        #作图
-        ax3.plot_surface(X,Y,Z,cmap='rainbow')
-        #ax3.contour(X,Y,Z, zdim='z',offset=-2，cmap='rainbow)   #等高线图，要设置offset，为Z的最小值
-        plt.show()  
 def main():
     """
     main function for differential function with q
@@ -288,11 +267,12 @@ def main():
     Qmax = 10/C.sigma
     Xmin=[]
     Xmax = []
-
     for i in range(1,C.N + 1):
         Xmin.append(-Qmax)
         Xmax.append(Qmax)
     x0 = np.random.random([1000,C.N+1])
+    xtest = np.random.random([1000,C.N+1])
+    ytest = initialState(xtest)
     x0[:,0:C.N] = 2 * Qmax*(x0[:,0:C.N]-0.5)
     geom = dde.geometry.Hypercube(Xmin,Xmax)
     # geom = dde.geometry.Interval(-1, 1)
@@ -304,16 +284,12 @@ def main():
                 plt.plot(x0[:,j],ob_y[:,i],'.')
                 plt.show()
     '''
-    
     timedomain = dde.geometry.TimeDomain(0, tmax)
     geom = dde.geometry.GeometryXTime(geom, timedomain)
-    x_initial = np.random.rand(13, C.N+1)
-    xtest = tf.convert_to_tensor(x_initial)
-    ytest = np.random.rand(13, C.sizeRho)
-    ytest = tf.convert_to_tensor(ytest)
+    
     # Initial conditions
     ic = []
-
+    ic_nb=[]
     ptset = dde.bc.PointSet(x0)
     
     inside = lambda x, _: ptset.inside(x)
@@ -323,6 +299,7 @@ def main():
         ic.append( dde.DirichletBC(
         geom, ptset.values_to_func(ob_y[:, j:j+1]), inside, component=j
         ))
+        ic_nb.append(dde.IC(geom, lambda X: initialState(X,j), boundary,component= j))
         # test
         # print(initialState(x_initial,j))
     # print(SLE_q(xtest,ytest))
@@ -330,15 +307,22 @@ def main():
     # ic.append(bc)
 
     # data
-    data = dde.data.TimePDE(geom,
+    data1 = dde.data.TimePDE(geom,
     lambda x,y: SLE_q(x,y,C),
+    ic_nb ,
+    num_domain= 1000, 
+    num_boundary= 0,
+    num_initial=100, 
+    num_test=None)
+    data = dde.data.TimePDE(geom,
+    lambda x,y: y*0,
     ic ,
     num_domain= 0, 
     num_boundary= 0,
     num_initial=100, 
     anchors=x0,
     num_test=None)
-
+    # lambda x,y: SLE_q(x,y,C),
     # settings for model
     
     layer_size = [C.N+1] + [50] * 3 + [(C.N+1) **2]
@@ -349,20 +333,21 @@ def main():
     save_model_dir = os.path.join(os.getcwd(),'Model_save','test_rho0')
     if not os.path.isdir(save_model_dir):
         os.mkdir(save_model_dir)
-    save_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1230')
-    load_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1230-50000')
+    save_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1231')
+    load_epoch = '70000'
+    load_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1231-'+load_epoch)
     Callfcn = dde.callbacks.ModelCheckpoint(save_model_name,verbose=1,save_better_only=True,period=10000)
 
     # initialize model
     net = dde.maps.FNN(layer_size, activation, initializer)
-    model = dde.Model(data,net)
-    
+    model = dde.Model(data1,net)
+    # load model
     model.compile("adam" , lr= 0.001)
     model.restore(load_model_name)
     
-    losshistory, train_state = model.train(epochs=60000,callbacks=[Callfcn],model_save_path=save_model_name)
-    dde.saveplot(losshistory, train_state, issave=True, isplot=True)
+    y_pre = model.predict(xtest)
+
+    
 
 if __name__ == "__main__":
-    plot_3d_initial()
-    # main()
+    main()
