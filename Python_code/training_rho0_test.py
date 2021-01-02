@@ -10,7 +10,7 @@ import os
 import matplotlib.pyplot as plt
 from utils import *
 C =ContantNumbers()
-DtypeTF = tf.float64
+DtypeTF = tf.float32
 Gamma=tf.constant(C.Gamma/ 1e12,dtype=DtypeTF)
 Ntf = tf.constant(C.N,dtype=DtypeTF)
 sizeRho = tf.constant(C.sizeRho,dtype=DtypeTF)
@@ -22,6 +22,10 @@ g = tf.constant(C.g,dtype=DtypeTF)
 w_vib = tf.constant(C.w_vib/ 1e12,dtype=DtypeTF)
 w = tf.constant(C.w,dtype=DtypeTF)
 v= tf.constant(C.v,dtype=DtypeTF)
+pi = tf.constant(np.pi,dtype=DtypeTF)
+etf = tf.constant(C.e,dtype=DtypeTF)
+ConstantNumber = 1/ ((2*pi)**(1/4) * (sigma)**0.5 )**Ntf
+QmaxTF = tf.constant(C.Qmax,dtype=DtypeTF)
 def getAlpha(alphaNUM,C):
     """
     get the index of individual alpha with alphaNUM
@@ -207,12 +211,24 @@ def initialState(X,wei=-1):
         return Rho0[:,wei:wei+1]
 def boundary(_, on_initial):
     return on_initial
+def boundary_condition(x,y):
+    """
+        exact boundary conditions
+    """
+    # re = []
+    # for i in range(0,C.sizeRho):
+    #     re.append(y[:,i:i+1] * (x[:,0:1]**2 - QmaxTF**2) 
+    #     * (x[:,1:2]**2 + QmaxTF**2))
+    # return tf.concat(re,axis=1)
+    return y * (x[:,0:1]**2 - QmaxTF**2)
+    
+
 def main():
     """
     main function for differential function with q
     """
-    
-    dde.config.real.set_float64()
+    if DtypeTF == tf.float64:
+        dde.config.real.set_float64()
     # geometry part
 
 
@@ -224,8 +240,8 @@ def main():
         Xmin.append(-Qmax)
         Xmax.append(Qmax)
     x0 = np.random.random([round(10000),C.N+1])
-    
     x0[:,0:C.N] = 2 * Qmax*(x0[:,0:C.N]-0.5)
+    np.save('rand_x0',x0)
     geom = dde.geometry.Hypercube(Xmin,Xmax)
     # geom = dde.geometry.Interval(-1, 1)
     ob_y = initialState(x0)
@@ -285,22 +301,23 @@ def main():
     save_model_dir = os.path.join(os.getcwd(),'Model_save','test_rho0_0101')
     if not os.path.isdir(save_model_dir):
         os.mkdir(save_model_dir)
-    save_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1230')
+    save_model_name = os.path.join(save_model_dir,'model_test')
     load_epoch = '60000'
     load_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1230-'+load_epoch)
-    Callfcn = dde.callbacks.ModelCheckpoint(save_model_name,verbose=1,save_better_only=True,period=10000)
+    Callfcn = dde.callbacks.ModelCheckpoint(save_model_name,verbose=1,save_better_only=True,period=5000)
     
     # initialize model
     net = dde.maps.FNN(layer_size, activation, initializer)
     model = dde.Model(data,net)
-    net.apply_output_transform
+    net.apply_output_transform(boundary_condition)
     model.compile("adam" , lr= 0.001)
-    model.restore(load_model_name)
+    # model.restore(load_model_name)
     # model_sle = dde.Model(data1,model.net)
     # model_sle.compile("adam" , lr= 0.001)
     losshistory, train_state = model.train(
         epochs=600000,
         callbacks=[Callfcn],
+        display_every=500,
         model_save_path=save_model_name
         )
     dde.saveplot(losshistory, train_state, issave=True, isplot=True)

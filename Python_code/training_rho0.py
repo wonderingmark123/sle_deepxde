@@ -9,52 +9,7 @@ import math
 from scipy.special import factorial
 import os
 import matplotlib.pyplot as plt
-# from utils import *
-class ContantNumbers:
-    """
-    some constant numbers for the whole program
-    """
-
-    def __init__(self):
-        self.N = 2
-        #  % number of atoms
-
-        self.nc = 0
-        self.cutoff = 9
-        # % alpha_s cutoff, alpha_s=0,1,2,\,cutoff
-        alpha_max = (self.cutoff+1)**self.N
-        # % defined to instead alpha_1, alpha_2, \, alpha_N
-        self.alpha_max = alpha_max
-        # % Parameter set:
-        c = 3*10**8
-        self.w = 0
-        self.v = 0
-        
-        w_vib = 1200
-        self.w_vib = w_vib*100*c 
-        # % [cm^(-1)] ---> [m^(-1)]  ---> s^ -1
-        self.Gamma = 33 * 100*c
-        # % [cm^(-1)]
-        self.lamb = 0.5
-        self.g = 70*100*c 
-        # % [cm^(-1)]
-        # self.alphaArray = reshape(1:self.alpha_max,self.cutoff + 1,self.cutoff +1)
-        n_c = 0
-        # % ground state photon number |n_c>
-        T = 300
-        # % [K]
-        hbar = 1.0545718*10**(-34)
-        # % [m^2 * kg / s]
-        k_b = 1.38064852*10**(-23)
-        # % [m^2 * kg * s^(-2) * K^(-1)]
-
-        self.n_bar = (np.exp(hbar*self.w_vib/k_b/T)-1)**(-1)
-        self.sigma = (self.n_bar+0.5)**0.5
-        # self.sizeall = (self.N + 1)**2 * self.alpha_max
-        self.sizeRho = (self.N + 1)**2
-        self.G = self.g * (self.nc + 1)**0.5
-        self.e = 2.718281828459045
-        self.Qmax = 10/self.sigma
+from utils import *
 
 C =ContantNumbers()
 DtypeTF = tf.float32
@@ -73,63 +28,6 @@ pi = tf.constant(np.pi,dtype=DtypeTF)
 etf = tf.constant(C.e,dtype=DtypeTF)
 ConstantNumber = 1/ ((2*pi)**(1/4) * (sigma)**0.5 )**Ntf
 QmaxTF = tf.constant(C.Qmax,dtype=DtypeTF)
-def getAlpha(alphaNUM,C):
-    """
-    get the index of individual alpha with alphaNUM
-    """
-    alphaNUM = alphaNUM - 1
-    alpha = np.zeros([C.N], dtype=int)
-    for i in range(1, C.N + 1):
-        alpha[i - 1] = alphaNUM % (C.cutoff+1)
-        alphaNUM = np.round((alphaNUM - alpha[i-1]) / (C.cutoff+1))
-    return alpha
-
-def getXHalf_real(m,n,N):
-    """
-    get the rho number of y vecter for half of rho real part
-
-    0<n<m<N+1
-    n       1 -> N
-    m       2 -> N+1
-    result  N+1 -> (N+1)(N+2)/2 -1
-
-    n==m
-    n       1 -> N+1
-    m       1 -> N+1
-    result  m-1
-    """
-    assert(m >= n)
-    assert(m <= N + 1 and m >=1)
-    assert(n <= N + 1 and n >=1)
-    if m==n:
-        return m-1
-    elif m>n:
-        return round((m-2)*(m-1)/2 + n + N )
-def getXHalf_imag(m,n,N):
-    """
-    get the rho number of y vecter for half of rho imag part 
-    n<m
-    n       1 -> N
-    m       2 -> N+1
-    result  (N+2)* (N+1) /2 -> (N+1)^2 -1
-
-    n==m
-    n       1 -> N+1
-    m       1 -> N+1
-    result  m-1
-    """
-    assert(m >= n)
-    assert(m <= N + 1 and m >=1)
-    assert(n <= N + 1 and n >=1)
-    if m==n:
-        return m-1
-    elif m>n:
-        return round( (m-2)*(m-1)/2 + n + (N+2)* (N+1) /2 -1)
-def delta(a, b):
-    if(a == b):
-        return int(1)
-    else:
-        return int(0)
 
 def SLE_q(x,y,C):
     """
@@ -393,9 +291,9 @@ def main():
     data = dde.data.TimePDE(geom,
     lambda x,y: SLE_q(x,y,C),
     ic ,
-    num_domain= 1000, 
+    num_domain= 2000, 
     num_boundary= 0,
-    num_initial=100, 
+    num_initial=500, 
     num_test=None)
 
     # settings for model
@@ -409,8 +307,9 @@ def main():
     if not os.path.isdir(save_model_dir):
         os.mkdir(save_model_dir)
     save_model_name = os.path.join(save_model_dir,'model_save')
-    load_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1230-50000')
-    Callfcn = dde.callbacks.ModelCheckpoint(save_model_name,verbose=1,save_better_only=True,period=5000)
+    load_epoch = '15000'
+    load_model_name = save_model_name + '-' + load_epoch
+    Callfcn = dde.callbacks.ModelCheckpoint(save_model_name,verbose=1,save_better_only=True,period=10000)
 
     # initialize model
     net = dde.maps.FNN(layer_size, activation, initializer)
@@ -418,7 +317,7 @@ def main():
     model = dde.Model(data,net)
     
     model.compile("adam" , lr= 0.001)
-    # model.restore(load_model_name)
+    model.restore(load_model_name)
     
     losshistory, train_state = model.train(epochs=60000,callbacks=[Callfcn],model_save_path=save_model_name)
     dde.saveplot(losshistory, train_state, issave=True, isplot=True)
