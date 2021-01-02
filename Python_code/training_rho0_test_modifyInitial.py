@@ -2,62 +2,15 @@ from os import error
 import numpy as np
 import deepxde as dde
 from deepxde.backend import tf
-from numpy.core.function_base import linspace
 from numpy.lib import polynomial
 import scipy
 import math
 from scipy.special import factorial
 import os
 import matplotlib.pyplot as plt
-# from utils import *
-class ContantNumbers:
-    """
-    some constant numbers for the whole program
-    """
-
-    def __init__(self):
-        self.N = 2
-        #  % number of atoms
-
-        self.nc = 0
-        self.cutoff = 9
-        # % alpha_s cutoff, alpha_s=0,1,2,\,cutoff
-        alpha_max = (self.cutoff+1)**self.N
-        # % defined to instead alpha_1, alpha_2, \, alpha_N
-        self.alpha_max = alpha_max
-        # % Parameter set:
-        c = 3*10**8
-        self.w = 0
-        self.v = 0
-        
-        w_vib = 1200
-        self.w_vib = w_vib*100*c 
-        # % [cm^(-1)] ---> [m^(-1)]  ---> s^ -1
-        self.Gamma = 33 * 100*c
-        # % [cm^(-1)]
-        self.lamb = 0.5
-        self.g = 70*100*c 
-        # % [cm^(-1)]
-        # self.alphaArray = reshape(1:self.alpha_max,self.cutoff + 1,self.cutoff +1)
-        n_c = 0
-        # % ground state photon number |n_c>
-        T = 300
-        # % [K]
-        hbar = 1.0545718*10**(-34)
-        # % [m^2 * kg / s]
-        k_b = 1.38064852*10**(-23)
-        # % [m^2 * kg * s^(-2) * K^(-1)]
-
-        self.n_bar = (np.exp(hbar*self.w_vib/k_b/T)-1)**(-1)
-        self.sigma = (self.n_bar+0.5)**0.5
-        # self.sizeall = (self.N + 1)**2 * self.alpha_max
-        self.sizeRho = (self.N + 1)**2
-        self.G = self.g * (self.nc + 1)**0.5
-        self.e = 2.718281828459045
-        self.Qmax = 10/self.sigma
-
+from utils import *
 C =ContantNumbers()
-DtypeTF = tf.float32
+DtypeTF = tf.float64
 Gamma=tf.constant(C.Gamma/ 1e12,dtype=DtypeTF)
 Ntf = tf.constant(C.N,dtype=DtypeTF)
 sizeRho = tf.constant(C.sizeRho,dtype=DtypeTF)
@@ -73,17 +26,6 @@ pi = tf.constant(np.pi,dtype=DtypeTF)
 etf = tf.constant(C.e,dtype=DtypeTF)
 ConstantNumber = 1/ ((2*pi)**(1/4) * (sigma)**0.5 )**Ntf
 QmaxTF = tf.constant(C.Qmax,dtype=DtypeTF)
-def getAlpha(alphaNUM,C):
-    """
-    get the index of individual alpha with alphaNUM
-    """
-    alphaNUM = alphaNUM - 1
-    alpha = np.zeros([C.N], dtype=int)
-    for i in range(1, C.N + 1):
-        alpha[i - 1] = alphaNUM % (C.cutoff+1)
-        alphaNUM = np.round((alphaNUM - alpha[i-1]) / (C.cutoff+1))
-    return alpha
-
 def getXHalf_real(m,n,N):
     """
     get the rho number of y vecter for half of rho real part
@@ -125,11 +67,6 @@ def getXHalf_imag(m,n,N):
         return m-1
     elif m>n:
         return round( (m-2)*(m-1)/2 + n + (N+2)* (N+1) /2 -1)
-def delta(a, b):
-    if(a == b):
-        return int(1)
-    else:
-        return int(0)
 
 def SLE_q(x,y,C):
     """
@@ -201,21 +138,25 @@ def SLE_q(x,y,C):
     #         Drho[X_real] = Drho[X_real] + AA + DD
     #         Drho[X_imag] = Drho[X_imag] + EE + HH
 
-    return Drho
+    return tf.concat(Drho, axis=1)
 
 def phi(q,alphaS):
     """
-    phi for position q_s and eigen value alpha_s
-    NOte : H_alpha is the physical form.
-    ψ_(α_s ) (q_s )=e^(-q_s^2/2σ^2 )/√(2^(α_s ) α_s !〖(2π)〗^(1/2) σ) H_(α_s ) (q_s/(√2 σ))
+        phi for position q_s and eigen value alpha_s
+        NOte : H_alpha is the physical form.
+        ψ_(α_s ) (q_s )=e^(-q_s^2/2σ^2 )/√(2^(α_s ) α_s !〖(2π)〗^(1/2) σ) H_(α_s ) (q_s/(√2 σ))
     """
-    
-    H_alpha = scipy.special.eval_hermite(round(alphaS),q/(2**0.5 * C.sigma))
-    Phivalue= np.exp(- q **2 / 2 / C.sigma**2) / np.sqrt(
+    if(alphaS == 0):
+        Phivalue= etf ** (- q **2 / (2 * sigma**2)) / (
+          (2* pi) ** 0.5 *sigma
+                )**0.5
+    else:
+        H_alpha = scipy.special.eval_hermite(round(alphaS),q/(2**0.5 * C.sigma))
+        Phivalue= etf ** (- q **2 / 2 / sigma**2) / (
         2 ** alphaS * factorial(alphaS, exact=True) * (2*np.pi) ** 0.5 *C.sigma
-    ) * H_alpha
+                )**0.5 * H_alpha
     return Phivalue
-def initialState(X,wei=-1):
+def initialState_tf(X,wei=-1,sample_output=None):
     """
     initial state for the rho 2020/12/25 wodnering
     ρ(q,0)=1/[〖(2π)〗^(1/4) √σ]^N |├ UP⟩⟨UP┤|∙∏_(s=1)^N▒〖ψ_((α_s=0)) (q_s)〗
@@ -235,53 +176,40 @@ def initialState(X,wei=-1):
             if i == N+1:
                 Rhoij = 1/2
             else:
-                Rhoij = 1/2/C.N
+                Rhoij = 1/2/Ntf
         elif i == N+1:
-            Rhoij = 1 / 2/ math.sqrt(C.N)
+            Rhoij = 1 / 2/ (Ntf)**0.5
         else:
-            Rhoij = 1/2/C.N 
+            Rhoij = 1/2/Ntf
         return Rhoij
-    NUM_initial,_ = np.shape(X)
-    Rho0 = np.zeros([NUM_initial,C.sizeRho])
+    
+    if sample_output is None:
+        NUM_initial,_ = np.shape(X)
+        Rho0 = np.zeros([NUM_initial,C.sizeRho])
+    else:
+        Rho0 = []
+        for i in range(0,C.sizeRho):
+            Rho0.append(sample_output[:,i:i+1]*0)
     N = C.N
-    ConstantNumber = 1/ ((2*np.pi)**(1/4) * np.sqrt(C.sigma) )**N
+    ConstantNumber = 1/ ((2*pi)**(1/4) * (sigma)**0.5 )**Ntf
     Phi0_multi = 1
-    for s in range(0,N):
+    for s in range(1,N):
         Phi0_multi = Phi0_multi * phi(X[:,s:s+1] , 0) 
     for j in range(1,C.N + 2):
         for i in range(j + 1 ,C.N +2):
             Xnum = getXHalf_real(i,j,C.N)
             X_imag = getXHalf_imag(i,j,C.N) 
-            Rho0[:,Xnum:Xnum+1] =ConstantNumber * Phi0_multi * rhoij(i,j) 
+            Rho0[Xnum] =Rho0[Xnum] + ConstantNumber * Phi0_multi * rhoij(i,j)
 
-            Rho0[:,X_imag:X_imag+1] = 0
     for n  in range(1,N + 2):
-        Rho0[:,n-1:n] =ConstantNumber * Phi0_multi * rhoij(n,n)
+        Rho0[n-1] =Rho0[n-1]+ ConstantNumber * Phi0_multi * rhoij(n,n)
     if wei == -1:
-        return Rho0
+        return tf.concat(Rho0, axis=1)
     else:
         return Rho0[:,wei:wei+1]
 def boundary(_, on_initial):
     return on_initial
-def plot_3d_initial():
-    fig = plt.figure()  #定义新的三维坐标轴
-    ax3 = plt.axes(projection='3d')
-    Qmax = 10/C.sigma
-    #定义三维数据
-    num=1000
-    x0 = np.random.random([num,C.N+1])
-    x0[:,0:C.N] = 2 * Qmax*(x0[:,0:C.N]-0.5)
-    zz = initialState(x0)
-    for i in range(0,len(zz[1,:])):
-        X, Y,Z = np.meshgrid(x0[:,0], x0[:,1],zz[:,1])
-        # Z = np.sin(X)+np.cos(Y)
-
-
-        #作图
-        ax3.plot_surface(X,Y,Z,cmap='rainbow')
-        #ax3.contour(X,Y,Z, zdim='z',offset=-2，cmap='rainbow)   #等高线图，要设置offset，为Z的最小值
-        plt.show()  
-def initial_condition(x,y):
+def boundary_condition(x,y):
     """
         main function for differential function with q
     """
@@ -324,36 +252,27 @@ def initial_condition(x,y):
             result[i] = result[i] * (x[:,j:j+1] - QmaxTF)*(
                 x[:,j:j+1] + QmaxTF)
     return tf.concat(result, axis=1)
-def boundary_condition(x,y):
-    """
-        exact boundary conditions
-    """
-    # re = []
-    # for i in range(0,C.sizeRho):
-    #     re.append(y[:,i:i+1] * (x[:,0:1]**2 - QmaxTF**2) 
-    #     * (x[:,1:2]**2 + QmaxTF**2))
-    # return tf.concat(re,axis=1)
-    return y * (x[:,0:1]**2 - QmaxTF**2)
-    
 def main():
     """
-    main function for differential function with q
+        main function for differential function with q
     """
     
-    # dde.config.real.set_float64()
+    dde.config.real.set_float64()
     # geometry part
+
+
     tmax = 1
-    Qmax = 10/C.sigma
+    
+    Qmax = C.Qmax
     Xmin=[]
     Xmax = []
-
     for i in range(1,C.N + 1):
         Xmin.append(-Qmax)
         Xmax.append(Qmax)
-    
+
     geom = dde.geometry.Hypercube(Xmin,Xmax)
     # geom = dde.geometry.Interval(-1, 1)
-    
+    # ob_y = initialState(x0)
     '''
     check rho0
         for i in range(0,len(ob_y[1,:])):
@@ -361,28 +280,11 @@ def main():
                 plt.plot(x0[:,j],ob_y[:,i],'.')
                 plt.show()
     '''
-    
     timedomain = dde.geometry.TimeDomain(0, tmax)
     geom = dde.geometry.GeometryXTime(geom, timedomain)
-
-    # test points setting
-    # x0 = np.random.random([1000,C.N+1])
-    # x0[:,0:C.N] = 2 * Qmax*(x0[:,0:C.N]-0.5)
-    # ob_y = initialState(x0)
-    # ptset = dde.bc.PointSet(x0)
-    # inside = lambda x, _: ptset.inside(x)
-
-    # x_initial = np.random.rand(13, C.N+1)
-    # xtest = tf.convert_to_tensor(x_initial)
-    # ytest = np.random.rand(13, C.sizeRho)
-    # ytest = tf.convert_to_tensor(ytest)
-
-    # Initial conditions
-    ic = []
+    
 
 
-    for j in range(0,(C.N+1) **2):
-        ic.append(dde.IC(geom, lambda X: initialState(X,j), boundary,component= j))
         # test
         # print(initialState(x_initial,j))
     # print(SLE_q(xtest,ytest))
@@ -390,39 +292,41 @@ def main():
     # ic.append(bc)
 
     # data
-    data = dde.data.TimePDE(geom,
+    data_sle = dde.data.TimePDE(geom,
     lambda x,y: SLE_q(x,y,C),
-    ic ,
-    num_domain= 1000, 
-    num_boundary= 0,
-    num_initial=100, 
-    num_test=None)
+    [] ,num_domain= 1000)
 
+    # lambda x,y: SLE_q(x,y,C),
     # settings for model
     
-    layer_size = [C.N+1] + [100] * 5 + [(C.N+1) **2]
+    layer_size = [C.N+1] + [50] * 3 + [(C.N+1) **2]
     activation = "tanh"
     initializer = "Glorot uniform"
 
 
-    save_model_dir = os.path.join(os.getcwd(),'Model_save','test_rho0_0102')
+    save_model_dir = os.path.join(os.getcwd(),'Model_save','test_rho0_0101')
     if not os.path.isdir(save_model_dir):
         os.mkdir(save_model_dir)
-    save_model_name = os.path.join(save_model_dir,'model_save')
-    load_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1230-50000')
-    Callfcn = dde.callbacks.ModelCheckpoint(save_model_name,verbose=1,save_better_only=True,period=5000)
-
+    save_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1230')
+    load_epoch = '60000'
+    load_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1230-'+load_epoch)
+    Callfcn = dde.callbacks.ModelCheckpoint(save_model_name,verbose=1,save_better_only=True,period=10000)
+    
     # initialize model
     net = dde.maps.FNN(layer_size, activation, initializer)
-    net.apply_output_transform(boundary_condition)
-    model = dde.Model(data,net)
+    # net.apply_output_transform(boundary_condition)
+    model = dde.Model(data_sle,net)
     
-    model.compile("adam" , lr= 0.001)
+    model.compile("adam" , lr= 0.001, metrics=["l2 relative error"])
     # model.restore(load_model_name)
-    
-    losshistory, train_state = model.train(epochs=60000,callbacks=[Callfcn],model_save_path=save_model_name)
+    # model_sle = dde.Model(data_sle,model.net)
+    # model_sle.compile("adam" , lr= 0.001)
+    losshistory, train_state = model.train(
+        epochs=60000,
+        callbacks=[Callfcn],
+        model_save_path=save_model_name
+        )
     dde.saveplot(losshistory, train_state, issave=True, isplot=True)
 
 if __name__ == "__main__":
-    # plot_3d_initial()
     main()

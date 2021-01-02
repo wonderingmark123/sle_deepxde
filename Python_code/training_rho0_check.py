@@ -202,9 +202,11 @@ def phi(q,alphaS):
     """
     
     H_alpha = scipy.special.eval_hermite(round(alphaS),q/(2**0.5 * C.sigma))
-    Phivalue= np.exp(- q **2 / 2 / C.sigma**2) / np.sqrt(
-        2 ** alphaS * factorial(alphaS, exact=True) * (2*np.pi) ** 0.5 *C.sigma
-    ) * H_alpha
+    Phivalue= (np.exp(- q **2 / 2 / C.sigma**2)
+     / np.sqrt(
+        2 ** alphaS * factorial(alphaS, exact=True) 
+        * (2*np.pi) ** 0.5 *C.sigma
+    ) * H_alpha)
     return Phivalue
 def initialState(X,wei=-1):
     """
@@ -254,6 +256,17 @@ def initialState(X,wei=-1):
         return Rho0[:,wei:wei+1]
 def boundary(_, on_initial):
     return on_initial
+def plot_initial():
+    x0 = np.random.random([500,C.N+1])
+    Qmax = 10/C.sigma
+    x0[:,0:C.N] = 2 * Qmax*(x0[:,0:C.N]-0.5)
+    x0[:,1]=x0[:,1]*0
+    y0 = initialState(x0)
+    for i in range(0,9):
+        plt.subplot(3,3,i+1)
+        plt.plot(x0[:,0],y0[:,i],'.')
+    plt.show()
+
 def main():
     """
     main function for differential function with q
@@ -274,6 +287,8 @@ def main():
     xtest = np.random.random([1000,C.N+1])
     ytest = initialState(xtest)
     x0[:,0:C.N] = 2 * Qmax*(x0[:,0:C.N]-0.5)
+    x0[:,1]=x0[:,1]*0
+    x0[:,2]=x0[:,2]*0
     geom = dde.geometry.Hypercube(Xmin,Xmax)
     # geom = dde.geometry.Interval(-1, 1)
     ob_y = initialState(x0)
@@ -333,8 +348,8 @@ def main():
     save_model_dir = os.path.join(os.getcwd(),'Model_save','test_rho0')
     if not os.path.isdir(save_model_dir):
         os.mkdir(save_model_dir)
-    save_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1231')
-    load_epoch = '70000'
+    save_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1230')
+    load_epoch = '60000'
     load_model_name = os.path.join(os.getcwd(),'Model_save','test_rho0','test1231-'+load_epoch)
     Callfcn = dde.callbacks.ModelCheckpoint(save_model_name,verbose=1,save_better_only=True,period=10000)
 
@@ -344,10 +359,14 @@ def main():
     # load model
     model.compile("adam" , lr= 0.001)
     model.restore(load_model_name)
-    
-    y_pre = model.predict(xtest)
 
-    
+    y_pre = model.predict(x0)
+    for i in range(0,9):
+        plt.subplot(3,3,i+1)
+        plt.plot(x0[:,0],ob_y[:,i],'.b')
+        plt.plot(x0[:,0],y_pre[:,i],'.r')
+    plt.show()
 
 if __name__ == "__main__":
-    main()
+    plot_initial()
+    # main()
